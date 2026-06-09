@@ -5,7 +5,7 @@
 > 共享契约：`docs/contracts/collection-api.md`
 > 上游依赖：M1 查询 API 与 AI HOT client
 > 推荐实现客户端：后端 / worker AI coding 客户端
-> 技术栈决策：Python + FastAPI + PostgreSQL + Redis + APScheduler worker service。
+> 技术栈决策：Python + FastAPI + PostgreSQL + Redis + APScheduler worker service。正式 / 共享环境使用 PostgreSQL；本地开发可显式启用 SQLite 持久化模式。
 
 ## 1. 目标
 
@@ -26,6 +26,7 @@ M2 在此基础上扩展：
 
 - 从“临时查询 AI HOT”变成“持久采集多来源”。
 - 引入 PostgreSQL 保存 source、run、raw item、health。
+- 引入显式本地 SQLite 模式，便于没有 PostgreSQL 的本机环境保留 source 和抓取数据；不得作为静默降级。
 - 引入 Redis 保存锁、ETag、Last-Modified、去重集合、轻量 run 状态。
 - 参考 HotPush 的 RSSHub/RSS、调度、缓存、规则和多源基础能力，但不照搬其源内 ID 作为跨源聚类能力。
 

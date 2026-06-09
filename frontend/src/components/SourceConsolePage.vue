@@ -6,7 +6,6 @@ import {
   createSource,
   disableSource,
   enableSource,
-  fetchRawItems,
   fetchRuns as fetchFetchRuns,
   fetchSourceHealth,
   fetchSources,
@@ -40,7 +39,6 @@ import type {
   ApiError,
   FetchRun,
   FetchRunStatus,
-  RawItem,
   SourceConfig,
   SourceHealth,
   SourcePreview,
@@ -51,7 +49,6 @@ import type {
 
 const sources = ref<SourceConfig[]>([]);
 const recentRuns = ref<FetchRun[]>([]);
-const rawItems = ref<RawItem[]>([]);
 const healthItems = ref<SourceHealth[]>([]);
 const filters = ref<SourceFilterState>({ ...emptySourceFilters });
 const sourceForm = ref<SourceFormState>(createEmptySourceForm());
@@ -100,13 +97,6 @@ const fetchRunLabels: Record<FetchRunStatus, string> = {
   cancelled: "已取消",
 };
 
-const rawItemLabels: Record<RawItem["status"], string> = {
-  new: "新增",
-  duplicate: "重复",
-  ignored: "忽略",
-  failed: "失败",
-};
-
 const filteredSources = computed(() => filterSources(sources.value, filters.value));
 const activeFilterCount = computed(() => countSourceFilters(filters.value));
 const empty = computed(() => !loading.value && !error.value && filteredSources.value.length === 0);
@@ -124,18 +114,16 @@ const categoryOptions = computed(() =>
 async function loadSources() {
   loading.value = true;
   error.value = null;
-  const [sourceResponse, runResponse, rawItemResponse, healthResponse] = await Promise.all([
+  const [sourceResponse, runResponse, healthResponse] = await Promise.all([
     fetchSources({ take: 100 }),
     fetchFetchRuns({ take: 10 }),
-    fetchRawItems({ take: 10 }),
     fetchSourceHealth({ take: 20 }),
   ]);
   loading.value = false;
   traceId.value = sourceResponse.meta.traceId;
-  error.value = sourceResponse.error ?? runResponse.error ?? rawItemResponse.error ?? healthResponse.error;
+  error.value = sourceResponse.error ?? runResponse.error ?? healthResponse.error;
   sources.value = sourceResponse.data?.items ?? [];
   recentRuns.value = runResponse.data?.items ?? [];
-  rawItems.value = rawItemResponse.data?.items ?? [];
   healthItems.value = healthResponse.data?.items ?? [];
 }
 
@@ -268,16 +256,6 @@ function runStatusClass(status: FetchRunStatus): string {
   }
   if (status === "running") {
     return "status-degraded";
-  }
-  return "status-disabled";
-}
-
-function rawItemStatusClass(status: RawItem["status"]): string {
-  if (status === "new") {
-    return "status-enabled";
-  }
-  if (status === "failed") {
-    return "status-circuit-open";
   }
   return "status-disabled";
 }
@@ -560,31 +538,6 @@ onMounted(() => {
           </article>
         </div>
         <p v-else class="collection-empty">暂无抓取任务。</p>
-      </section>
-
-      <section class="collection-panel" aria-label="原始条目">
-        <div class="collection-panel-header">
-          <div>
-            <p class="eyebrow">Raw Items</p>
-            <h3>原始条目</h3>
-          </div>
-          <span class="trace-id">{{ rawItems.length }} 条</span>
-        </div>
-        <div v-if="rawItems.length" class="collection-list">
-          <article v-for="item in rawItems" :key="item.id" class="collection-row">
-            <div>
-              <a :href="item.url" target="_blank" rel="noreferrer" class="collection-title">
-                {{ item.title }}
-              </a>
-              <div class="collection-subtitle">{{ item.sourceName }} · {{ formatTime(item.fetchedAt) }}</div>
-            </div>
-            <span class="status-badge" :class="rawItemStatusClass(item.status)">
-              {{ rawItemLabels[item.status] }}
-            </span>
-            <p class="collection-snippet">{{ item.summary || item.contentSnippet || "该条暂无摘要" }}</p>
-          </article>
-        </div>
-        <p v-else class="collection-empty">暂无原始条目。</p>
       </section>
 
       <section class="collection-panel" aria-label="源健康状态">

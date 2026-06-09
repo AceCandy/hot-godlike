@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 import os
+from pathlib import Path
 
 
 def _env_bool(name: str) -> bool:
@@ -23,6 +24,11 @@ class Settings:
     postgres_dsn: str | None = os.getenv("DATABASE_URL") or os.getenv("POSTGRES_DSN")
     use_postgres_source_repository: bool = _env_bool("USE_POSTGRES_SOURCE_REPOSITORY")
     use_postgres_collection_store: bool = _env_bool("USE_POSTGRES_COLLECTION_STORE")
+    storage_mode: str | None = os.getenv("STORAGE_MODE")
+    local_storage_path: str = os.getenv(
+        "LOCAL_STORAGE_PATH",
+        str(Path(__file__).resolve().parents[2] / "data" / "hot_godlike.sqlite"),
+    )
     use_scheduler_worker: bool = _env_bool("USE_SCHEDULER_WORKER")
     scheduler_worker_interval_seconds: int = int(
         os.getenv("SCHEDULER_WORKER_INTERVAL_SECONDS", "60")

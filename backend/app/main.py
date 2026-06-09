@@ -14,15 +14,29 @@ from app.core.envelope import error_payload, trace_id
 from app.core.errors import ErrorCode, QueryServiceError
 from app.services.aihot_client import AihotClient
 from app.services.cache import InMemoryCacheStore
-from app.services.collection_registry import InMemorySourceRepository, PostgresSourceRepository, build_source_repository
+from app.services.collection_registry import (
+    InMemorySourceRepository,
+    PostgresSourceRepository,
+    SqliteSourceRepository,
+    build_source_repository,
+)
 from app.services.collection_runner import (
     CollectionRunner,
     SourceItemFetcher,
 )
-from app.services.collection_store import InMemoryCollectionStore, PostgresCollectionStore, build_collection_store
+from app.services.collection_store import (
+    InMemoryCollectionStore,
+    PostgresCollectionStore,
+    SqliteCollectionStore,
+    build_collection_store,
+)
 from app.services.fetcher_pool import build_fetcher_pool
 from app.services.fetch_control import InMemorySourceLockStore, RedisSourceLockStore, build_source_lock_store
-from app.services.fetch_control import InMemorySourceMetadataStore, RedisSourceMetadataStore, build_source_metadata_store
+from app.services.fetch_control import (
+    InMemorySourceMetadataStore,
+    RedisSourceMetadataStore,
+    build_source_metadata_store,
+)
 from app.services.fetch_control import SourceDedupeStore, build_source_dedupe_store
 from app.services.scheduler import SchedulerService
 from app.services.scheduler_worker import build_scheduler_worker
@@ -33,9 +47,9 @@ def create_app(
     *,
     aihot_client: AihotClient | None = None,
     cache: InMemoryCacheStore | None = None,
-    source_repository: InMemorySourceRepository | PostgresSourceRepository | None = None,
+    source_repository: InMemorySourceRepository | PostgresSourceRepository | SqliteSourceRepository | None = None,
     source_previewer: SourcePreviewer | None = None,
-    collection_store: InMemoryCollectionStore | PostgresCollectionStore | None = None,
+    collection_store: InMemoryCollectionStore | PostgresCollectionStore | SqliteCollectionStore | None = None,
     source_item_fetcher: SourceItemFetcher | None = None,
     source_lock_store: InMemorySourceLockStore | RedisSourceLockStore | None = None,
     source_metadata_store: InMemorySourceMetadataStore | RedisSourceMetadataStore | None = None,
@@ -71,11 +85,15 @@ def create_app(
     app.state.aihot_client = aihot_client or AihotClient()
     app.state.cache = cache or InMemoryCacheStore()
     app.state.source_repository = source_repository or build_source_repository(
+        storage_mode=settings.storage_mode,
+        local_sqlite_path=settings.local_storage_path,
         use_postgres=settings.use_postgres_source_repository,
         postgres_dsn=settings.postgres_dsn,
     )
     app.state.source_previewer = source_previewer or SourcePreviewer()
     app.state.collection_store = collection_store or build_collection_store(
+        storage_mode=settings.storage_mode,
+        local_sqlite_path=settings.local_storage_path,
         use_postgres=settings.use_postgres_collection_store,
         postgres_dsn=settings.postgres_dsn,
     )

@@ -60,8 +60,14 @@ class AihotClient:
                     )
             except httpx.TimeoutException:
                 last_error = upstream_timeout()
-            except httpx.HTTPError:
-                last_error = upstream_unavailable()
+            except httpx.HTTPError as exc:
+                last_error = upstream_unavailable(
+                    details={
+                        "reason": type(exc).__name__,
+                        "message": str(exc),
+                        "url": url,
+                    }
+                )
             else:
                 try:
                     result = self._handle_response(

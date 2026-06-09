@@ -81,13 +81,19 @@ def upstream_rate_limited() -> QueryServiceError:
     )
 
 
-def upstream_unavailable(status_code: int | None = None) -> QueryServiceError:
+def upstream_unavailable(
+    status_code: int | None = None,
+    details: dict[str, Any] | None = None,
+) -> QueryServiceError:
+    error_details = {"upstreamStatus": status_code}
+    if details:
+        error_details.update(details)
     return QueryServiceError(
         code=ErrorCode.UPSTREAM_UNAVAILABLE,
         message="数据源暂时不可用，请稍后重试。",
         status_code=503,
         retryable=True,
-        details={"upstreamStatus": status_code},
+        details=error_details,
     )
 
 

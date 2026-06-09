@@ -561,6 +561,24 @@ const mockRawItemItems: RawItem[] = [
     rawPayloadRef: null,
     status: "new",
   },
+  {
+    id: "raw_mock_2",
+    sourceId: "src_custom_rss",
+    sourceName: "Custom RSS",
+    title: "Custom RSS failed raw item",
+    url: "https://example.com/raw/2",
+    normalizedUrl: "https://example.com/raw/2",
+    publishedAt: null,
+    fetchedAt: "2026-05-29T01:00:05Z",
+    author: null,
+    summary: "用于验证采集数据页筛选状态的 mock 数据。",
+    contentSnippet: null,
+    hotScore: null,
+    rank: null,
+    image: null,
+    rawPayloadRef: null,
+    status: "failed",
+  },
 ];
 
 const mockSourceHealthItems: SourceHealth[] = [

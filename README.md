@@ -30,7 +30,29 @@ pytest
 http://localhost:8000
 ```
 
-M2 默认仍使用内存 source repository、collection store 和 source lock，便于本地开发和测试。启用 PostgreSQL source repository：
+M2 默认仍使用内存 source repository、collection store 和 source lock，便于本地开发和测试；内存模式重启后数据会丢失。
+
+启用显式本地持久化存储：
+
+```bash
+STORAGE_MODE=local uvicorn app.main:app --reload
+```
+
+默认写入：
+
+```text
+backend/data/hot_godlike.sqlite
+```
+
+也可以指定本地文件路径：
+
+```bash
+STORAGE_MODE=local LOCAL_STORAGE_PATH=/tmp/hot_godlike.sqlite uvicorn app.main:app --reload
+```
+
+`STORAGE_MODE=local` 会把 source、fetch run、raw item 和 source health 写入同一个 SQLite 文件。它是明确开启的本地持久化模式，不会在 PostgreSQL 配置缺失时静默兜底。
+
+启用 PostgreSQL source repository：
 
 ```bash
 USE_POSTGRES_SOURCE_REPOSITORY=true DATABASE_URL=postgresql://user:password@localhost:5432/hot_godlike uvicorn app.main:app --reload
@@ -40,6 +62,12 @@ USE_POSTGRES_SOURCE_REPOSITORY=true DATABASE_URL=postgresql://user:password@loca
 
 ```bash
 USE_POSTGRES_COLLECTION_STORE=true DATABASE_URL=postgresql://user:password@localhost:5432/hot_godlike uvicorn app.main:app --reload
+```
+
+也可以用统一 storage mode 启用 PostgreSQL：
+
+```bash
+STORAGE_MODE=postgres DATABASE_URL=postgresql://user:password@localhost:5432/hot_godlike uvicorn app.main:app --reload
 ```
 
 启用 Redis source lock：

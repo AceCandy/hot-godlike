@@ -5,6 +5,12 @@ from uuid import uuid4
 
 from app.core.errors import fetch_run_not_found, raw_item_not_found
 from app.core.envelope import trace_id
+from app.services.sqlite_storage import (
+    ensure_collection_schema,
+    normalize_storage_mode,
+    sqlite_connection_factory,
+    sqlite_params,
+)
 
 
 # SourceHealth 策略集中在这里，保证内存和 PostgreSQL store 使用同一套阈值。
@@ -434,11 +440,263 @@ class PostgresCollectionStore:
         return _health_from_row(row)
 
 
+class SqliteCollectionStore:
+    def __init__(self, connection_factory: CollectionStoreConnectionFactory) -> None:
+        self._connection_factory = connection_factory
+        with self._connection_factory() as connection:
+            ensure_collection_schema(connection)
+
+    @classmethod
+    def from_path(cls, path: str) -> "SqliteCollectionStore":
+        return cls(sqlite_connection_factory(path))
+
+    def existing_idempotent_run(self, source_id: str, idempotency_key: str | None) -> dict[str, Any] | None:
+        if not idempotency_key:
+            return None
+        with self._connection_factory() as connection:
+            row = connection.execute(
+                """
+                select * from fetch_runs
+                where source_id = :source_id and idempotency_key = :idempotency_key
+                """,
+                {"source_id": source_id, "idempotency_key": idempotency_key},
+            ).fetchone()
+        return _run_from_row(row) if row else None
+
+    def start_run(
+        self,
+        *,
+        source_id: str,
+        trigger: str,
+        idempotency_key: str | None,
+    ) -> dict[str, Any]:
+        now = _utc_now_datetime()
+        params = {
+            "id": f"run_{now.strftime('%Y%m%d%H%M%S')}_{uuid4().hex[:8]}",
+            "source_id": source_id,
+            "trigger": trigger,
+            "status": "running",
+            "started_at": now,
+            "finished_at": None,
+            "duration_ms": None,
+            "fetched_count": 0,
+            "new_count": 0,
+            "duplicate_count": 0,
+            "ignored_count": 0,
+            "error_code": None,
+            "error_message": None,
+            "trace_id": trace_id(),
+            "idempotency_key": idempotency_key,
+        }
+        with self._connection_factory() as connection:
+            connection.execute(_SQLITE_INSERT_RUN_SQL, sqlite_params(params))
+            connection.commit()
+        return self.get_run(params["id"])
+
+    def finish_run(
+        self,
+        run_id: str,
+        *,
+        status: str,
+        fetched_count: int,
+        new_count: int,
+        duplicate_count: int,
+        ignored_count: int,
+        error_code: str | None = None,
+        error_message: str | None = None,
+    ) -> dict[str, Any]:
+        current = self.get_run(run_id)
+        finished_at = _utc_now_datetime()
+        params = {
+            "run_id": run_id,
+            "status": status,
+            "finished_at": finished_at,
+            "duration_ms": _duration_ms(current["startedAt"], _format_utc(finished_at)),
+            "fetched_count": fetched_count,
+            "new_count": new_count,
+            "duplicate_count": duplicate_count,
+            "ignored_count": ignored_count,
+            "error_code": error_code,
+            "error_message": error_message,
+        }
+        with self._connection_factory() as connection:
+            cursor = connection.execute(_SQLITE_FINISH_RUN_SQL, sqlite_params(params))
+            if cursor.rowcount == 0:
+                raise fetch_run_not_found(run_id)
+            connection.commit()
+        return self.get_run(run_id)
+
+    def save_raw_items(self, items: list[dict[str, Any]]) -> tuple[int, int]:
+        new_count = 0
+        duplicate_count = 0
+        with self._connection_factory() as connection:
+            for item in items:
+                cursor = connection.execute(_SQLITE_INSERT_RAW_ITEM_SQL, sqlite_params(_raw_item_params(item)))
+                if cursor.rowcount:
+                    new_count += 1
+                else:
+                    duplicate_count += 1
+            connection.commit()
+        return new_count, duplicate_count
+
+    def record_success(self, source: dict[str, Any]) -> dict[str, Any]:
+        now = _utc_now_datetime()
+        status = _healthy_status(source)
+        next_fetch_at = _next_fetch_at_datetime(source, now, status=status)
+        health = {
+            "source_id": source["id"],
+            "status": status,
+            "last_succeeded_at": now,
+            "last_failed_at": None,
+            "consecutive_failures": 0,
+            "next_fetch_at": next_fetch_at,
+            "circuit_opened_at": None,
+            "degraded_until": None,
+            "last_error_code": None,
+            "last_error_message": None,
+            "updated_at": now,
+        }
+        return self._upsert_health(health)
+
+    def record_failure(self, source: dict[str, Any], *, error_code: str, error_message: str) -> dict[str, Any]:
+        previous = self._get_health_row(source["id"])
+        previous_row = dict(previous) if previous else None
+        failures = int(previous_row.get("consecutive_failures", 0)) + 1 if previous_row else 1
+        status = _failure_status(source, failures)
+        now = _utc_now_datetime()
+        next_fetch_at = _next_fetch_at_datetime(source, now, status=status)
+        health = {
+            "source_id": source["id"],
+            "status": status,
+            "last_succeeded_at": previous_row.get("last_succeeded_at") if previous_row else None,
+            "last_failed_at": now,
+            "consecutive_failures": failures,
+            "next_fetch_at": next_fetch_at,
+            "circuit_opened_at": now if status == "circuit_open" else None,
+            "degraded_until": next_fetch_at if status == "degraded" else None,
+            "last_error_code": error_code,
+            "last_error_message": error_message,
+            "updated_at": now,
+        }
+        return self._upsert_health(health)
+
+    def list_runs(self, *, source_id: str | None = None, status: str | None = None, take: int = 50) -> dict[str, Any]:
+        params: dict[str, Any] = {"limit": take + 1}
+        where: list[str] = []
+        if source_id:
+            where.append("source_id = :source_id")
+            params["source_id"] = source_id
+        if status:
+            where.append("status = :status")
+            params["status"] = status
+        where_sql = f" where {' and '.join(where)}" if where else ""
+        with self._connection_factory() as connection:
+            rows = connection.execute(
+                f"select * from fetch_runs{where_sql} order by started_at desc limit :limit",
+                params,
+            ).fetchall()
+        return _page([_run_from_row(row) for row in rows[:take]], take, has_next=len(rows) > take)
+
+    def get_run(self, run_id: str) -> dict[str, Any]:
+        with self._connection_factory() as connection:
+            row = connection.execute(
+                "select * from fetch_runs where id = :run_id",
+                {"run_id": run_id},
+            ).fetchone()
+        if not row:
+            raise fetch_run_not_found(run_id)
+        return _run_from_row(row)
+
+    def list_raw_items(
+        self,
+        *,
+        source_id: str | None = None,
+        status: str | None = None,
+        q: str | None = None,
+        take: int = 50,
+    ) -> dict[str, Any]:
+        params: dict[str, Any] = {"limit": take + 1}
+        where: list[str] = []
+        if source_id:
+            where.append("source_id = :source_id")
+            params["source_id"] = source_id
+        if status:
+            where.append("status = :status")
+            params["status"] = status
+        if q:
+            where.append("lower(title) like :q")
+            params["q"] = f"%{q.lower()}%"
+        where_sql = f" where {' and '.join(where)}" if where else ""
+        with self._connection_factory() as connection:
+            rows = connection.execute(
+                f"select * from raw_items{where_sql} order by fetched_at desc limit :limit",
+                params,
+            ).fetchall()
+        return _page([_raw_item_from_row(row) for row in rows[:take]], take, has_next=len(rows) > take)
+
+    def get_raw_item(self, raw_item_id: str) -> dict[str, Any]:
+        with self._connection_factory() as connection:
+            row = connection.execute(
+                "select * from raw_items where id = :raw_item_id",
+                {"raw_item_id": raw_item_id},
+            ).fetchone()
+        if not row:
+            raise raw_item_not_found(raw_item_id)
+        return _raw_item_from_row(row)
+
+    def list_health(self, *, source_id: str | None = None, status: str | None = None, take: int = 50) -> dict[str, Any]:
+        params: dict[str, Any] = {"limit": take + 1}
+        where: list[str] = []
+        if source_id:
+            where.append("source_id = :source_id")
+            params["source_id"] = source_id
+        if status:
+            where.append("status = :status")
+            params["status"] = status
+        where_sql = f" where {' and '.join(where)}" if where else ""
+        with self._connection_factory() as connection:
+            rows = connection.execute(
+                f"select * from source_health{where_sql} order by updated_at desc limit :limit",
+                params,
+            ).fetchall()
+        return _page([_health_from_row(row) for row in rows[:take]], take, has_next=len(rows) > take)
+
+    def _get_health_row(self, source_id: str) -> dict[str, Any] | None:
+        with self._connection_factory() as connection:
+            row = connection.execute(
+                "select * from source_health where source_id = :source_id",
+                {"source_id": source_id},
+            ).fetchone()
+        return dict(row) if row else None
+
+    def _upsert_health(self, health: dict[str, Any]) -> dict[str, Any]:
+        with self._connection_factory() as connection:
+            connection.execute(_SQLITE_UPSERT_HEALTH_SQL, sqlite_params(health))
+            connection.commit()
+            row = connection.execute(
+                "select * from source_health where source_id = :source_id",
+                {"source_id": health["source_id"]},
+            ).fetchone()
+        return _health_from_row(row)
+
+
 def build_collection_store(
     *,
+    storage_mode: str | None = None,
+    local_sqlite_path: str | None = None,
     use_postgres: bool,
     postgres_dsn: str | None,
-) -> InMemoryCollectionStore | PostgresCollectionStore:
+) -> InMemoryCollectionStore | PostgresCollectionStore | SqliteCollectionStore:
+    mode = normalize_storage_mode(storage_mode)
+    if mode == "local":
+        if not local_sqlite_path:
+            raise RuntimeError("STORAGE_MODE=local 时必须设置 LOCAL_STORAGE_PATH。")
+        return SqliteCollectionStore.from_path(local_sqlite_path)
+    if mode == "postgres":
+        use_postgres = True
+    if mode == "memory":
+        use_postgres = False
+
     if use_postgres:
         if not postgres_dsn:
             raise RuntimeError("USE_POSTGRES_COLLECTION_STORE=true 时必须设置 DATABASE_URL 或 POSTGRES_DSN。")
@@ -469,7 +727,8 @@ def _duration_ms(started_at: str, finished_at: str) -> int:
 
 
 def _next_fetch_at(source: dict[str, Any], current: str, *, status: str) -> str:
-    return _format_utc(_next_fetch_at_datetime(source, _parse_datetime(current) or _utc_now_datetime(), status=status)) or current
+    current_datetime = _parse_datetime(current) or _utc_now_datetime()
+    return _format_utc(_next_fetch_at_datetime(source, current_datetime, status=status)) or current
 
 
 def _healthy_status(source: dict[str, Any]) -> str:
@@ -554,6 +813,66 @@ insert into source_health (
     last_error_message = excluded.last_error_message,
     updated_at = excluded.updated_at
 returning *
+"""
+
+_SQLITE_INSERT_RUN_SQL = """
+insert into fetch_runs (
+    id, source_id, trigger, status, started_at, finished_at, duration_ms,
+    fetched_count, new_count, duplicate_count, ignored_count,
+    error_code, error_message, trace_id, idempotency_key
+) values (
+    :id, :source_id, :trigger, :status, :started_at, :finished_at, :duration_ms,
+    :fetched_count, :new_count, :duplicate_count, :ignored_count,
+    :error_code, :error_message, :trace_id, :idempotency_key
+)
+"""
+
+_SQLITE_FINISH_RUN_SQL = """
+update fetch_runs set
+    status = :status,
+    finished_at = :finished_at,
+    duration_ms = :duration_ms,
+    fetched_count = :fetched_count,
+    new_count = :new_count,
+    duplicate_count = :duplicate_count,
+    ignored_count = :ignored_count,
+    error_code = :error_code,
+    error_message = :error_message
+where id = :run_id
+"""
+
+_SQLITE_INSERT_RAW_ITEM_SQL = """
+insert or ignore into raw_items (
+    id, source_id, source_name, title, url, normalized_url, published_at, fetched_at,
+    author, summary, content_snippet, hot_score, rank, image, raw_payload_ref,
+    status, dedupe_key, created_at
+) values (
+    :id, :source_id, :source_name, :title, :url, :normalized_url, :published_at, :fetched_at,
+    :author, :summary, :content_snippet, :hot_score, :rank, :image, :raw_payload_ref,
+    :status, :dedupe_key, :created_at
+)
+"""
+
+_SQLITE_UPSERT_HEALTH_SQL = """
+insert into source_health (
+    source_id, status, last_succeeded_at, last_failed_at, consecutive_failures,
+    next_fetch_at, circuit_opened_at, degraded_until, last_error_code,
+    last_error_message, updated_at
+) values (
+    :source_id, :status, :last_succeeded_at, :last_failed_at, :consecutive_failures,
+    :next_fetch_at, :circuit_opened_at, :degraded_until, :last_error_code,
+    :last_error_message, :updated_at
+) on conflict (source_id) do update set
+    status = excluded.status,
+    last_succeeded_at = excluded.last_succeeded_at,
+    last_failed_at = excluded.last_failed_at,
+    consecutive_failures = excluded.consecutive_failures,
+    next_fetch_at = excluded.next_fetch_at,
+    circuit_opened_at = excluded.circuit_opened_at,
+    degraded_until = excluded.degraded_until,
+    last_error_code = excluded.last_error_code,
+    last_error_message = excluded.last_error_message,
+    updated_at = excluded.updated_at
 """
 
 

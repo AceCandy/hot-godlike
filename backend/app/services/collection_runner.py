@@ -4,8 +4,16 @@ from typing import Any
 
 from app.core.errors import QueryServiceError, source_cookie_required, source_disabled
 from app.services.collection import normalize_raw_item
-from app.services.collection_registry import InMemorySourceRepository, PostgresSourceRepository
-from app.services.collection_store import InMemoryCollectionStore, PostgresCollectionStore
+from app.services.collection_registry import (
+    InMemorySourceRepository,
+    PostgresSourceRepository,
+    SqliteSourceRepository,
+)
+from app.services.collection_store import (
+    InMemoryCollectionStore,
+    PostgresCollectionStore,
+    SqliteCollectionStore,
+)
 from app.services.fetcher_pool import FeedSourceFetcher
 from app.services.fetch_control import (
     InMemorySourceLockStore,
@@ -23,8 +31,8 @@ class CollectionRunner:
     def __init__(
         self,
         *,
-        source_repository: InMemorySourceRepository | PostgresSourceRepository,
-        store: InMemoryCollectionStore | PostgresCollectionStore,
+        source_repository: InMemorySourceRepository | PostgresSourceRepository | SqliteSourceRepository,
+        store: InMemoryCollectionStore | PostgresCollectionStore | SqliteCollectionStore,
         fetch_items: SourceItemFetcher,
         lock_store: InMemorySourceLockStore | RedisSourceLockStore,
         source_dedupe_store: SourceDedupeStore | None = None,

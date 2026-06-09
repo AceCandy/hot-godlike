@@ -63,6 +63,29 @@ mockItems = mockItems.map((item, itemIndex) => (itemIndex === index ? updated : 
 return envelope(updated);
 ```
 
+### Upstream HTML Must Be Sanitized Before Rendering
+
+When rendering HTML captured from upstream sources, do not pass the raw string directly to `v-html`.
+Route it through a project-owned sanitizer that:
+
+- Keeps only readable content tags and safe attributes needed by the UI.
+- Allows only `http` and `https` links/media URLs.
+- Removes scripts, event handlers, inline styles, classes, and data attributes from upstream HTML.
+- Adds safe external-link attributes such as `target="_blank"` and `rel="noopener noreferrer"`.
+- Keeps plain text escaped when it is rendered through an HTML sink.
+
+Wrong:
+
+```vue
+<div v-html="item.contentSnippet"></div>
+```
+
+Correct:
+
+```vue
+<div v-html="sanitizeRawItemHtml(item.contentSnippet || 'No summary')"></div>
+```
+
 ---
 
 ## Testing Requirements
@@ -71,6 +94,7 @@ return envelope(updated);
 
 - Mock write flows need regression tests for create -> list -> follow-up mutation.
 - Tests that mutate module-level mock state must reset that state in `afterEach`.
+- Rendering upstream HTML needs regression tests that prove readable tags/media survive and unsafe URLs, script tags, and event attributes are removed.
 
 ---
 

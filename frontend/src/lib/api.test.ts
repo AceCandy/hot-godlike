@@ -8,6 +8,7 @@ import {
   mockFetchRuns,
   mockItems,
   mockPreviewSource,
+  mockRawItems,
   mockSourceHealth,
   mockSources,
   mockTriggerSourceFetch,
@@ -104,6 +105,66 @@ describe("query api helpers", () => {
     expect(filterSources(response.data?.items ?? [], filters).map((item) => item.id)).toEqual([
       "src_disabled_rss",
     ]);
+  });
+
+  it("raw item filters build query params without empty values", async () => {
+    const { buildRawItemQuery, countRawItemFilters } = await import("./rawItemFilters");
+    const filters = {
+      sourceId: " src_custom_rss ",
+      status: "failed" as const,
+      q: "  Custom  ",
+    };
+
+    expect(buildRawItemQuery(filters, 50)).toEqual({
+      sourceId: "src_custom_rss",
+      status: "failed",
+      q: "Custom",
+      take: 50,
+    });
+    expect(countRawItemFilters(filters)).toBe(3);
+    expect(buildRawItemQuery({ sourceId: "", status: "", q: "" }, 50)).toEqual({ take: 50 });
+  });
+
+  it("mock raw items support source, status and keyword filters", async () => {
+    const response = await mockRawItems({
+      sourceId: "src_custom_rss",
+      status: "failed",
+      q: "custom",
+      take: 10,
+    });
+
+    expect(response.error).toBeNull();
+    expect(response.data?.items.map((item) => item.id)).toEqual(["raw_mock_2"]);
+  });
+
+  it("sanitizes raw item html while preserving readable rich content", async () => {
+    const { sanitizeRawItemHtml } = await import("./sanitizeHtml");
+    const html = sanitizeRawItemHtml(`
+      <p></p><div class="lightbox-wrapper">
+        <a class="lightbox" href="https://cdn.example/original.png" onclick="steal()" data-download-href="bad">
+          <img src="https://cdn.example/optimized.png" alt="image" width="690" height="350" onerror="steal()" srcset="javascript:alert(1) 1x">
+        </a>
+      </div>
+      <br>* <em>数据图示来自 SimilarWeb。</em>
+      <script>alert("xss")</script>
+    `);
+
+    expect(html).toContain('<a href="https://cdn.example/original.png" target="_blank" rel="noopener noreferrer">');
+    expect(html).toContain(
+      '<img src="https://cdn.example/optimized.png" alt="image" width="690" height="350" loading="lazy" decoding="async">',
+    );
+    expect(html).toContain("<em>数据图示来自 SimilarWeb。</em>");
+    expect(html).not.toContain("onclick");
+    expect(html).not.toContain("onerror");
+    expect(html).not.toContain("srcset");
+    expect(html).not.toContain("script");
+  });
+
+  it("drops unsafe html urls and keeps plain text escaped", async () => {
+    const { sanitizeRawItemHtml } = await import("./sanitizeHtml");
+    const html = sanitizeRawItemHtml('hello <strong>world</strong> <a href="jav&#x61;script:alert(1)">bad</a>');
+
+    expect(html).toBe("hello <strong>world</strong> <a>bad</a>");
   });
 
   it("mock collection preview can represent source security errors", async () => {

@@ -7,10 +7,11 @@ from app.services import aihot_client as client_module
 from app.services.aihot_client import AihotClient
 from app.services.cache import InMemoryCacheStore
 from app.services.planner import plan_items
+from app.core.errors import ErrorCode, QueryServiceError
 
 
 class SequenceAsyncClient:
-    responses: list[httpx.Response] = []
+    responses: list[httpx.Response | Exception] = []
     calls: list[dict[str, Any]] = []
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
@@ -31,7 +32,10 @@ class SequenceAsyncClient:
         headers: dict[str, str],
     ) -> httpx.Response:
         self.calls.append({"url": url, "params": params, "headers": headers})
-        return self.responses.pop(0)
+        response = self.responses.pop(0)
+        if isinstance(response, Exception):
+            raise response
+        return response
 
 
 async def no_sleep(_: float) -> None:
@@ -93,3 +97,21 @@ async def test_fetch_json_retries_rate_limit_then_returns_success() -> None:
     assert result.status_code == 200
     assert result.data == {"items": [], "take": 50}
     assert len(SequenceAsyncClient.calls) == 2
+
+
+@pytest.mark.asyncio
+async def test_fetch_json_exposes_http_error_diagnostics() -> None:
+    plan = plan_items()
+    cache = InMemoryCacheStore()
+    SequenceAsyncClient.responses = [httpx.ConnectError("dns lookup failed")]
+
+    with pytest.raises(QueryServiceError) as exc_info:
+        await AihotClient(
+            base_url="https://example.test",
+            retry_count=0,
+        ).fetch_json(plan, cache)
+
+    assert exc_info.value.code == ErrorCode.UPSTREAM_UNAVAILABLE
+    assert exc_info.value.details["reason"] == "ConnectError"
+    assert exc_info.value.details["message"] == "dns lookup failed"
+    assert exc_info.value.details["url"] == "https://example.test/api/public/items"

@@ -460,12 +460,22 @@ GET /api/source-health?sourceId=src_aihot_api&status=degraded&take=50&cursor=opa
 
 ## 7. 存储契约
 
-M2 必须落 PostgreSQL 表：
+M2 正式 / 共享环境必须落 PostgreSQL 表：
 
 - `sources`
 - `fetch_runs`
 - `raw_items`
 - `source_health`
+
+本地开发允许显式启用 SQLite 持久化模式：
+
+- `STORAGE_MODE=local`
+- 默认路径为 `backend/data/hot_godlike.sqlite`
+- 可通过 `LOCAL_STORAGE_PATH` 覆盖
+- SQLite 必须保存同一组 `sources`、`fetch_runs`、`raw_items`、`source_health` 数据
+- 内存模式仅用于本地开发和测试，不保证重启后数据存在
+
+不得在 PostgreSQL 配置缺失时静默降级到本地文件；存储模式必须由配置显式选择。
 
 M2 必须使用 Redis key：
 

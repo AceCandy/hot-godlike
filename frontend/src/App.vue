@@ -2,6 +2,7 @@
 import { computed, onMounted, ref } from "vue";
 
 import ApiStateView from "./components/ApiStateView.vue";
+import CollectionDataPage from "./components/CollectionDataPage.vue";
 import DailyArchiveList from "./components/DailyArchiveList.vue";
 import DailyReportView from "./components/DailyReportView.vue";
 import ItemResultCard from "./components/ItemResultCard.vue";
@@ -19,7 +20,7 @@ import type {
   TimePreset,
 } from "./types/api";
 
-type ViewMode = "items" | "daily" | "archive" | "sources";
+type ViewMode = "items" | "daily" | "archive" | "sources" | "collection";
 
 const viewMode = ref<ViewMode>("items");
 const itemMode = ref<QueryMode>("selected");
@@ -55,10 +56,24 @@ const empty = computed(() => {
   return false;
 });
 
-const pageTitle = computed(() => (viewMode.value === "sources" ? "数据源控制台" : "热点查询工作台"));
-const pageSubtitle = computed(() =>
-  viewMode.value === "sources" ? "M2 Collection Sources" : "AI HOT Seed Source",
-);
+const pageTitle = computed(() => {
+  if (viewMode.value === "sources") {
+    return "数据源控制台";
+  }
+  if (viewMode.value === "collection") {
+    return "采集数据";
+  }
+  return "热点查询工作台";
+});
+const pageSubtitle = computed(() => {
+  if (viewMode.value === "sources") {
+    return "M2 Collection Sources";
+  }
+  if (viewMode.value === "collection") {
+    return "M2 Collection Data";
+  }
+  return "AI HOT Seed Source";
+});
 
 async function loadHelp() {
   const response = await fetchHelp();
@@ -141,13 +156,13 @@ onMounted(() => {
 
 <template>
   <main class="app-shell antialiased">
-    <section class="toolbar" :class="{ 'toolbar-single': viewMode === 'sources' }">
+    <section class="toolbar" :class="{ 'toolbar-single': viewMode === 'sources' || viewMode === 'collection' }">
       <div class="brand-block">
         <h1>{{ pageTitle }}</h1>
         <span>{{ pageSubtitle }}</span>
       </div>
 
-      <form v-if="viewMode !== 'sources'" class="search-form" @submit.prevent="loadItems">
+      <form v-if="viewMode === 'items'" class="search-form" @submit.prevent="loadItems">
         <input v-model="keyword" type="search" placeholder="搜索关键词" aria-label="搜索关键词" />
         <button type="submit" class="primary-button">查询</button>
       </form>
@@ -174,6 +189,9 @@ onMounted(() => {
         </button>
         <button type="button" :class="{ active: viewMode === 'archive' }" @click="loadArchives">
           日报归档
+        </button>
+        <button type="button" :class="{ active: viewMode === 'collection' }" @click="viewMode = 'collection'">
+          采集数据
         </button>
         <button type="button" :class="{ active: viewMode === 'sources' }" @click="viewMode = 'sources'">
           数据源
@@ -202,7 +220,7 @@ onMounted(() => {
       </div>
     </section>
 
-    <template v-if="viewMode !== 'sources'">
+    <template v-if="viewMode !== 'sources' && viewMode !== 'collection'">
       <WarningBanner :warnings="warnings" />
       <ApiStateView :loading="loading" :empty="empty" :error="error" :trace-id="traceId" @retry="retry" />
     </template>
@@ -217,6 +235,7 @@ onMounted(() => {
       :archives="archives"
       @select="loadDaily"
     />
+    <CollectionDataPage v-if="viewMode === 'collection'" />
     <SourceConsolePage v-if="viewMode === 'sources'" />
   </main>
 </template>
