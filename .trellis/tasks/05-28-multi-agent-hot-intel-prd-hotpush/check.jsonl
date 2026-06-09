@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/guides/index.md", "reason": "质量检查时确认跨层契约、复用和变更影响没有遗漏"}
+{"file": ".trellis/spec/backend/index.md", "reason": "检查 M1 后端实现是否遵守后端规范入口"}
+{"file": ".trellis/spec/frontend/index.md", "reason": "检查 M1 前端实现是否遵守前端规范入口"}
+{"file": ".trellis/tasks/05-28-multi-agent-hot-intel-prd-hotpush/research/hotpush-reference.md", "reason": "检查文档和实现是否把 HotPush 能力与本项目新增能力区分清楚"}

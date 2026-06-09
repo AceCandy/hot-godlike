@@ -1,0 +1,14 @@
+{
+  "items": [
+    {
+      "id": "fixture-aihot-1",
+      "title": "AI HOT fixture item",
+      "url": "https://example.com/aihot/item",
+      "source": "AI HOT",
+      "summary": "AI HOT fixture summary",
+      "score": 98
+    }
+  ],
+  "hasNext": false,
+  "take": 50
+}

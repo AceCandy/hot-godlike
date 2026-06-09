@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/guides/index.md", "reason": "开发前通用思考指南索引，提醒跨层契约和复用检查"}
+{"file": ".trellis/spec/backend/index.md", "reason": "M1 后端查询内核实现前需要读取的后端规范入口"}
+{"file": ".trellis/spec/frontend/index.md", "reason": "M1 前端查询工作台实现前需要读取的前端规范入口"}
+{"file": ".trellis/tasks/05-28-multi-agent-hot-intel-prd-hotpush/research/hotpush-reference.md", "reason": "HotPush 参考能力和不可照搬边界，用于后续 M2-M7 设计与实现"}

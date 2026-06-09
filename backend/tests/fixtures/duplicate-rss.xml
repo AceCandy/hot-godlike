@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>Duplicate Fixture Feed</title>
+    <item>
+      <title>Duplicate first item</title>
+      <link>https://example.com/duplicate/item</link>
+      <pubDate>Fri, 29 May 2026 03:00:00 GMT</pubDate>
+      <description>Duplicate first summary</description>
+    </item>
+    <item>
+      <title>Duplicate second item</title>
+      <link>https://example.com/duplicate/item?utm_source=test</link>
+      <pubDate>Fri, 29 May 2026 03:05:00 GMT</pubDate>
+      <description>Duplicate second summary</description>
+    </item>
+  </channel>
+</rss>

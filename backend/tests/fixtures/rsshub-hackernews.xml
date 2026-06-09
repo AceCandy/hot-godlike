@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>RSSHub Hacker News Fixture</title>
+    <item>
+      <title>RSSHub frontpage item</title>
+      <link>https://example.com/rsshub/frontpage</link>
+      <pubDate>Fri, 29 May 2026 01:00:00 GMT</pubDate>
+      <description>RSSHub frontpage summary</description>
+    </item>
+  </channel>
+</rss>
