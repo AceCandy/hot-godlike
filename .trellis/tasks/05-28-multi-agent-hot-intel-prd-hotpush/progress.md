@@ -174,7 +174,7 @@
 - [x] 2026-06-09 Trellis 当前任务复核通过：`/usr/bin/python3 ./.trellis/scripts/task.py current --source` 返回 `.trellis/tasks/05-28-multi-agent-hot-intel-prd-hotpush`；`/usr/bin/python3 ./.trellis/scripts/get_context.py --mode phase --step 3.5 --platform codex` 返回 wrap-up reminder。
 - [x] 2026-06-09 Phase 3.4 commit precheck 仍阻塞：`git status --porcelain` 和 `git rev-parse --show-toplevel` 均返回 `fatal: not a git repository (or any of the parent directories): .git`；当前目录无法执行 workflow 要求的提交计划，必须先确认真实 Git repository path 或外部提交方式。
 - [x] 2026-06-09 Git 绑定复核通过：已在当前目录执行 `git init`，并把 `origin` 绑定到 `https://github.com/AceCandy/hot-godlike.git`；本地分支已设为 `main`；`git status --porcelain=v1 --untracked-files=all` 可正常列出待初始提交文件。Phase 3.4 已从“非 Git 仓库阻塞”推进到“等待用户确认初始提交计划”。
-- [x] 2026-06-09 Phase 3.4 初始提交计划已给出：计划提交 `chore: initial project import`，覆盖当前所有非 ignored 项；按 workflow 需要用户回复 `行` / `ok` 后才能执行 `git add` / `git commit`。本轮未提交、未推送。
+- [x] 2026-06-09 Phase 3.4 初始提交计划已确认并执行：用户回复 `ok` 后，已提交 `33803d5be02d5a0b0ed07108e982542cbee136bd chore: initial project import`；提交前执行 `git diff --cached --check` 通过，344 个非 ignored 文件进入初始提交；未推送。
 - [x] 2026-06-09 Phase 3.3 spec update 复核通过：新增 `.trellis/spec/guides/stage-doc-upgrade-thinking-guide.md`，覆盖 stage contract / PRD 升级后的 `prd.md`、`workflow.md`、`progress.md`、`task.json` 同步项、必跑验证项和 `/usr/bin/python3` Trellis 脚本 fallback 记录规则；`.trellis/spec/guides/index.md` 已加入入口。
 - [x] 2026-06-09 Trellis 脚本 Python 入口复核：`python3` 当前指向 `/opt/homebrew/bin/python3`，执行 `.trellis/scripts/get_context.py` 时被系统策略拦截 Homebrew Python 3.14 动态库；`/usr/bin/python3` 可正常执行 `get_context.py --mode phase --step 3.1/3.3/3.4 --platform codex`。后续恢复若遇到同类错误，先用 `/usr/bin/python3` 跑 Trellis 脚本，不要擅自改 shell 环境。
 - [x] 2026-06-09 M7 workflow 8.3 文档完整性复核通过：contract 覆盖目标、全局约定、枚举、数据结构、API 端点、错误码、存储契约、安全合规、Prompt injection 防护、测试 fixture 和兼容边界；后端 PRD 覆盖目标、背景依赖、In/Out Scope、系统场景、模块/API/数据模型、状态机、Agent 输入输出、错误处理、安全合规、Prompt injection 防护、测试 fixture、验收、联调、迁移兼容和风险；前端 PRD 覆盖对应 UI 侧必备项。
@@ -308,7 +308,7 @@
 - [ ] 如果继续 M5：先由用户确认 `docs/contracts/commentary-distribution-api.md`、`docs/prd/m5-backend-commentary-distribution.md`、`docs/prd/m5-frontend-commentary-distribution-console.md` 可作为开发依据，再进入编码；不要跳过确认门槛。
 - [ ] 如果继续 M6：先由用户确认 `docs/contracts/admin-rules-api.md`、`docs/prd/m6-backend-admin-rules.md`、`docs/prd/m6-frontend-admin-rules-console.md` 可作为开发依据，再进入编码；不要跳过确认门槛。
 - [ ] 如果继续 M7：先由用户确认 `docs/contracts/eval-observability-api.md`、`docs/prd/m7-backend-eval-observability.md`、`docs/prd/m7-frontend-observability-console.md` 可作为开发依据，再进入编码；不要跳过确认门槛。
-- [ ] 如果进入 workflow Phase 3.4 commit：当前目录已绑定新仓库 `https://github.com/AceCandy/hot-godlike.git`，先按 `git status --porcelain=v1 --untracked-files=all` 生成初始提交计划，等待用户一次性确认后再 `git add` / `git commit`；不要跳过确认直接提交或推送。
+- [ ] 如果进入 workflow Phase 3.5 wrap-up：Phase 3.4 初始导入提交已完成；先确认工作区只剩本进度/任务元数据标识提交，再按 workflow 提醒可运行 `/trellis:finish-work`。如需同步远端，单独确认后再 `git push -u origin main`。
 
 ## 恢复规则
 
